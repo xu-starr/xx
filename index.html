@@ -50,7 +50,7 @@
     <video id="cam" autoplay playsinline muted></video>
     <canvas id="canvas"></canvas>
   </div>
-  <div id="tip">点击画面启动｜手张开越大，花开越盛</div>
+  <div id="tip">点击画面启动｜手停则花停，手越张花开越盛</div>
 
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
@@ -60,31 +60,38 @@
     const camEl = document.getElementById('cam');
     const canvas = document.getElementById('canvas');
     const ctx = canvas.getContext('2d');
-    let hands;
-    let lastTargetTime = 0;
 
-    // ========== 这里重点调！ ==========
-    const bloomStart = 0;        // 花开片段起始时间（秒）
-    const bloomEnd = 3.2;       // 完全盛开对应的视频时间（秒）
-    const minOpen = 0.15;       // 判定“开始打开”的阈值
-    const maxOpen = 0.45;       // 手到这个张开度 = 完全盛开
-    // =================================
+    let hands;
+
+    // 视频花开区间
+    const bloomStart = 0;
+    const bloomEnd = 3.2;
+
+    // 手掌开合检测区间
+    const minOpen = 0.15;
+    const maxOpen = 0.45;
+
+    // 稳定判断：手张开角度多久没变，才算“停住”
+    const stableFrames = 5;        // 连续多少帧变化很小才判定稳定
+    const stableThreshold = 0.012; // 张开度变化小于这个值，视为没动
+
+    // 当前花开进度 0~1
+    let currentBloom = 0;
+
+    // 上一帧的手掌张开度
+    let lastOpenValue = null;
+    let stableCount = 0;
+    let isStable = false;
 
     function dist(p1, p2) {
       return Math.sqrt((p1.x - p2.x) ** 2 + (p1.y - p2.y) ** 2);
     }
 
-    // 平滑过渡，防止画面疯狂抖动
-    function lerp(a, b, t) {
-      return a + (b - a) * t;
-    }
-
-    let smoothBloom = 0;
-
     async function initHands() {
       hands = new Hands({
         locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
       });
+
       hands.setOptions({
         maxNumHands: 1,
         modelComplexity: 1,
@@ -98,7 +105,11 @@
         ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
         ctx.restore();
 
-        if (!results.multiHandLandmarks.length) return;
+        // 没检测到手，保持当前开度不动
+        if (!results.multiHandLandmarks || results.multiHandLandmarks.length === 0) {
+          return;
+        }
+
         const lm = results.multiHandLandmarks[0];
 
         const wrist = lm[0];
@@ -108,7 +119,6 @@
         const ring = lm[16];
         const pinky = lm[20];
 
-        // 五个指尖到手腕距离，取平均值代表手掌张开程度
         const dThumb = dist(thumb, wrist);
         const dIndex = dist(index, wrist);
         const dMiddle = dist(middle, wrist);
@@ -117,20 +127,40 @@
 
         const avgDist = (dThumb + dIndex + dMiddle + dRing + dPinky) / 5;
 
-        // 映射： minOpen → 0；maxOpen → 1
-        let rawBloom = (avgDist - minOpen) / (maxOpen - minOpen);
-        rawBloom = Math.max(0, Math.min(1, rawBloom));
+        // 映射到 0~1
+        let targetBloom = (avgDist - minOpen) / (maxOpen - minOpen);
+        targetBloom = Math.max(0, Math.min(1, targetBloom));
 
-        // 平滑，防抖，不会跳帧
-        smoothBloom = lerp(smoothBloom, rawBloom, 0.22);
+        // 判断手是否稳定
+        if (lastOpenValue !== null) {
+          const diff = Math.abs(targetBloom - lastOpenValue);
 
-        // 把花开进度映射到视频时间
-        const targetTime = bloomStart + smoothBloom * (bloomEnd - bloomStart);
+          if (diff < stableThreshold) {
+            stableCount++;
 
-        // 只有变化足够大才更新视频，减少疯狂 seek
-        if (Math.abs(targetTime - lastTargetTime) > 0.06) {
+            // 连续稳定足够多帧后，锁住开度
+            if (stableCount >= stableFrames) {
+              isStable = true;
+            }
+          } else {
+            // 手在动，解锁
+            stableCount = 0;
+            isStable = false;
+          }
+        }
+
+        lastOpenValue = targetBloom;
+
+        // 关键：手稳定不动时，花保持当前开度；手变化时才跟随
+        if (!isStable) {
+          currentBloom = targetBloom;
+        }
+
+        // 只在变化时更新视频帧，避免画面抖动
+        const targetTime = bloomStart + currentBloom * (bloomEnd - bloomStart);
+
+        if (Math.abs(targetTime - videoPlayer.currentTime) > 0.05) {
           videoPlayer.currentTime = targetTime;
-          lastTargetTime = targetTime;
         }
       });
 
@@ -141,17 +171,18 @@
         width: 640,
         height: 480
       });
+
       camera.start();
     }
 
-    // 用户点击启动相机
+    // 点击页面启动摄像头和手势识别
     document.body.addEventListener('click', async () => {
       if (!hands) {
         await initHands();
       }
     }, { once: true });
 
-    // 视频预加载，保证 seek 可用
+    // 视频预加载后停在花苞位置
     videoPlayer.addEventListener('loadedmetadata', () => {
       videoPlayer.pause();
       videoPlayer.currentTime = bloomStart;

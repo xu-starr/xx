@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #f5f3ef;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+    }
+    #videoPlayer {
+      width: 90vw;
+      max-height: 85vh;
+      object-fit: contain;
+    }
+  </style>
+</head>
+<body>
+  <video id="videoPlayer" preload="auto"></video>
+
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+
+  <script>
+    const videoPlayer = document.getElementById('videoPlayer');
+    const VIDEO_URL = "./rose.mp4";
+    videoPlayer.src = VIDEO_URL;
+
+    let smoothProgress = 0;
+    const smoothFactor = 0.12;
+    let hands;
+
+    function initMediaPipe() {
+      hands = new Hands({
+        locateFile: (file) => {
+          return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
+        }
+      });
+
+      hands.setOptions({
+        maxNumHands: 1,
+        modelComplexity: 1,
+        minDetectionConfidence: 0.6,
+        minTrackingConfidence: 0.6
+      });
+
+      hands.onResults(onHandResult);
+
+      const dummyCanvas = document.createElement('canvas');
+      const camera = new Camera(dummyCanvas, {
+        onFrame: async () => {
+          await hands.send({ image: dummyCanvas });
+        },
+        width: 640,
+        height: 480
+      });
+      camera.start();
+    }
+
+    function calcDistance(p1, p2) {
+      return Math.sqrt(Math.pow(p1.x - p2.x, 2) + Math.pow(p1.y - p2.y, 2));
+    }
+
+    function onHandResult(results) {
+      if (!results.multiHandLandmarks || results.multiHandLandmarks.length === 0) {
+        return;
+      }
+
+      const landmarks = results.multiHandLandmarks[0];
+      const thumbTip = landmarks[4];
+      const indexTip = landmarks[8];
+      const wrist = landmarks[0];
+
+      const pinchDist = calcDistance(thumbTip, indexTip);
+      const refDist = calcDistance(wrist, landmarks[9]);
+      let rawVal = pinchDist / refDist;
+
+      const minPinch = 0.08;
+      const maxOpen = 0.65;
+      let mapped = (rawVal - minPinch) / (maxOpen - minPinch);
+      mapped = Math.max(0, Math.min(1, mapped));
+
+      smoothProgress += (mapped - smoothProgress) * smoothFactor;
+
+      if (videoPlayer.duration) {
+        videoPlayer.currentTime = smoothProgress * videoPlayer.duration;
+      }
+    }
+
+    videoPlayer.pause();
+    videoPlayer.volume = 0;
+    videoPlayer.addEventListener('loadedmetadata', () => {
+      initMediaPipe();
+    });
+  </script>
+</body>
+</html>

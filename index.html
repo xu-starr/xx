@@ -6,7 +6,7 @@
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
-      background: #f5f3ef;
+      background: #111;
       overflow: hidden;
       display: flex;
       flex-direction: column;
@@ -38,7 +38,8 @@
     #tip {
       margin-top: 12px;
       font-size: 14px;
-      color: #333;
+      color: #eee;
+      text-align: center;
     }
   </style>
 </head>
@@ -49,7 +50,7 @@
     <video id="cam" autoplay playsinline muted></video>
     <canvas id="canvas"></canvas>
   </div>
-  <div id="tip">点击页面启动手势识别｜张开手掌 = 播放，握拳 = 暂停</div>
+  <div id="tip">点击画面启动｜手张开越大，花开越盛</div>
 
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
@@ -60,10 +61,26 @@
     const canvas = document.getElementById('canvas');
     const ctx = canvas.getContext('2d');
     let hands;
-    let lastGesture = '';
-    let lock = false;
+    let lastTargetTime = 0;
 
-    // 初始化手势
+    // ========== 这里重点调！ ==========
+    const bloomStart = 0;        // 花开片段起始时间（秒）
+    const bloomEnd = 3.2;       // 完全盛开对应的视频时间（秒）
+    const minOpen = 0.15;       // 判定“开始打开”的阈值
+    const maxOpen = 0.45;       // 手到这个张开度 = 完全盛开
+    // =================================
+
+    function dist(p1, p2) {
+      return Math.sqrt((p1.x - p2.x) ** 2 + (p1.y - p2.y) ** 2);
+    }
+
+    // 平滑过渡，防止画面疯狂抖动
+    function lerp(a, b, t) {
+      return a + (b - a) * t;
+    }
+
+    let smoothBloom = 0;
+
     async function initHands() {
       hands = new Hands({
         locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
@@ -77,48 +94,43 @@
 
       hands.onResults((results) => {
         ctx.save();
-        ctx.clearRect(0,0,canvas.width,canvas.height);
-        ctx.drawImage(results.image,0,0,canvas.width,canvas.height);
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
         ctx.restore();
 
         if (!results.multiHandLandmarks.length) return;
-        const landmarks = results.multiHandLandmarks[0];
+        const lm = results.multiHandLandmarks[0];
 
-        // 简单判断：手掌张开 / 握拳
-        const thumbTip = landmarks[4];
-        const indexTip = landmarks[8];
-        const middleTip = landmarks[12];
-        const ringTip = landmarks[16];
-        const pinkyTip = landmarks[20];
-        const wrist = landmarks[0];
+        const wrist = lm[0];
+        const thumb = lm[4];
+        const index = lm[8];
+        const middle = lm[12];
+        const ring = lm[16];
+        const pinky = lm[20];
 
-        function dist(p1,p2){
-          return Math.sqrt((p1.x-p2.x)**2 + (p1.y-p2.y)**2);
-        }
-        const d1 = dist(thumbTip, wrist);
-        const d2 = dist(indexTip, wrist);
-        const d3 = dist(middleTip, wrist);
-        const d4 = dist(ringTip, wrist);
-        const d5 = dist(pinkyTip, wrist);
+        // 五个指尖到手腕距离，取平均值代表手掌张开程度
+        const dThumb = dist(thumb, wrist);
+        const dIndex = dist(index, wrist);
+        const dMiddle = dist(middle, wrist);
+        const dRing = dist(ring, wrist);
+        const dPinky = dist(pinky, wrist);
 
-        let gesture;
-        //所有指尖离手腕远 → 张开手掌
-        if(d1>0.22 && d2>0.22 && d3>0.22 && d4>0.22 && d5>0.22){
-          gesture = "open";
-        }else{
-          gesture = "fist";
-        }
+        const avgDist = (dThumb + dIndex + dMiddle + dRing + dPinky) / 5;
 
-        // 防抖，防止疯狂切换
-        if (gesture === lastGesture || lock) return;
-        lock = true;
-        setTimeout(()=>{lock=false;}, 450);
-        lastGesture = gesture;
+        // 映射： minOpen → 0；maxOpen → 1
+        let rawBloom = (avgDist - minOpen) / (maxOpen - minOpen);
+        rawBloom = Math.max(0, Math.min(1, rawBloom));
 
-        if(gesture === "open"){
-          videoPlayer.play();
-        }else{
-          videoPlayer.pause();
+        // 平滑，防抖，不会跳帧
+        smoothBloom = lerp(smoothBloom, rawBloom, 0.22);
+
+        // 把花开进度映射到视频时间
+        const targetTime = bloomStart + smoothBloom * (bloomEnd - bloomStart);
+
+        // 只有变化足够大才更新视频，减少疯狂 seek
+        if (Math.abs(targetTime - lastTargetTime) > 0.06) {
+          videoPlayer.currentTime = targetTime;
+          lastTargetTime = targetTime;
         }
       });
 
@@ -132,12 +144,18 @@
       camera.start();
     }
 
-    // 用户点击页面才启动（满足浏览器策略！）
-    document.body.addEventListener('click', async ()=>{
-      if(!hands){
+    // 用户点击启动相机
+    document.body.addEventListener('click', async () => {
+      if (!hands) {
         await initHands();
       }
     }, { once: true });
+
+    // 视频预加载，保证 seek 可用
+    videoPlayer.addEventListener('loadedmetadata', () => {
+      videoPlayer.pause();
+      videoPlayer.currentTime = bloomStart;
+    });
   </script>
 </body>
 </html>

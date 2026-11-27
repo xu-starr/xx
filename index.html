@@ -9,52 +9,122 @@
       background: #f5f3ef;
       overflow: hidden;
       display: flex;
+      flex-direction: column;
       align-items: center;
       justify-content: center;
       height: 100vh;
     }
     #videoPlayer {
       width: 90vw;
-      max-height: 85vh;
+      max-height: 75vh;
       object-fit: contain;
+    }
+    #camWrap {
+      position: fixed;
+      top: 12px;
+      right: 12px;
+      width: 160px;
+      height: 120px;
+      border: 2px solid #fff;
+      box-shadow: 0 2px 8px #00000044;
+      overflow: hidden;
+      border-radius: 8px;
+    }
+    #cam, #canvas {
+      width: 100%;
+      height: 100%;
+      transform: scaleX(-1);
+    }
+    #tip {
+      margin-top: 12px;
+      font-size: 14px;
+      color: #333;
     }
   </style>
 </head>
 <body>
-  <video id="videoPlayer" preload="auto"></video>
+  <video id="videoPlayer" preload="auto" src="./rose.mp4"></video>
+
+  <div id="camWrap">
+    <video id="cam" autoplay playsinline muted></video>
+    <canvas id="canvas"></canvas>
+  </div>
+  <div id="tip">点击页面启动手势识别｜张开手掌 = 播放，握拳 = 暂停</div>
 
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
 
   <script>
     const videoPlayer = document.getElementById('videoPlayer');
-    const VIDEO_URL = "./rose.mp4";
-    videoPlayer.src = VIDEO_URL;
-
-    let smoothProgress = 0;
-    const smoothFactor = 0.12;
+    const camEl = document.getElementById('cam');
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
     let hands;
+    let lastGesture = '';
+    let lock = false;
 
-    function initMediaPipe() {
+    // 初始化手势
+    async function initHands() {
       hands = new Hands({
-        locateFile: (file) => {
-          return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
-        }
+        locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
       });
-
       hands.setOptions({
         maxNumHands: 1,
         modelComplexity: 1,
-        minDetectionConfidence: 0.6,
-        minTrackingConfidence: 0.6
+        minDetectionConfidence: 0.7,
+        minTrackingConfidence: 0.7
       });
 
-      hands.onResults(onHandResult);
+      hands.onResults((results) => {
+        ctx.save();
+        ctx.clearRect(0,0,canvas.width,canvas.height);
+        ctx.drawImage(results.image,0,0,canvas.width,canvas.height);
+        ctx.restore();
 
-      const dummyCanvas = document.createElement('canvas');
-      const camera = new Camera(dummyCanvas, {
+        if (!results.multiHandLandmarks.length) return;
+        const landmarks = results.multiHandLandmarks[0];
+
+        // 简单判断：手掌张开 / 握拳
+        const thumbTip = landmarks[4];
+        const indexTip = landmarks[8];
+        const middleTip = landmarks[12];
+        const ringTip = landmarks[16];
+        const pinkyTip = landmarks[20];
+        const wrist = landmarks[0];
+
+        function dist(p1,p2){
+          return Math.sqrt((p1.x-p2.x)**2 + (p1.y-p2.y)**2);
+        }
+        const d1 = dist(thumbTip, wrist);
+        const d2 = dist(indexTip, wrist);
+        const d3 = dist(middleTip, wrist);
+        const d4 = dist(ringTip, wrist);
+        const d5 = dist(pinkyTip, wrist);
+
+        let gesture;
+        //所有指尖离手腕远 → 张开手掌
+        if(d1>0.22 && d2>0.22 && d3>0.22 && d4>0.22 && d5>0.22){
+          gesture = "open";
+        }else{
+          gesture = "fist";
+        }
+
+        // 防抖，防止疯狂切换
+        if (gesture === lastGesture || lock) return;
+        lock = true;
+        setTimeout(()=>{lock=false;}, 450);
+        lastGesture = gesture;
+
+        if(gesture === "open"){
+          videoPlayer.play();
+        }else{
+          videoPlayer.pause();
+        }
+      });
+
+      const camera = new Camera(camEl, {
         onFrame: async () => {
-          await hands.send({ image: dummyCanvas });
+          await hands.send({ image: camEl });
         },
         width: 640,
         height: 480
@@ -62,41 +132,12 @@
       camera.start();
     }
 
-    function calcDistance(p1, p2) {
-      return Math.sqrt(Math.pow(p1.x - p2.x, 2) + Math.pow(p1.y - p2.y, 2));
-    }
-
-    function onHandResult(results) {
-      if (!results.multiHandLandmarks || results.multiHandLandmarks.length === 0) {
-        return;
+    // 用户点击页面才启动（满足浏览器策略！）
+    document.body.addEventListener('click', async ()=>{
+      if(!hands){
+        await initHands();
       }
-
-      const landmarks = results.multiHandLandmarks[0];
-      const thumbTip = landmarks[4];
-      const indexTip = landmarks[8];
-      const wrist = landmarks[0];
-
-      const pinchDist = calcDistance(thumbTip, indexTip);
-      const refDist = calcDistance(wrist, landmarks[9]);
-      let rawVal = pinchDist / refDist;
-
-      const minPinch = 0.08;
-      const maxOpen = 0.65;
-      let mapped = (rawVal - minPinch) / (maxOpen - minPinch);
-      mapped = Math.max(0, Math.min(1, mapped));
-
-      smoothProgress += (mapped - smoothProgress) * smoothFactor;
-
-      if (videoPlayer.duration) {
-        videoPlayer.currentTime = smoothProgress * videoPlayer.duration;
-      }
-    }
-
-    videoPlayer.pause();
-    videoPlayer.volume = 0;
-    videoPlayer.addEventListener('loadedmetadata', () => {
-      initMediaPipe();
-    });
+    }, { once: true });
   </script>
 </body>
 </html>

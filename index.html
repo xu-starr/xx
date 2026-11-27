@@ -1,0 +1,870 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<title>花开 · 用手让一朵玫瑰绽放</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{width:100%;height:100%;overflow:hidden}
+  body{
+    background:#efe3d5;
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    -webkit-tap-highlight-color:transparent;
+    -webkit-user-select:none;user-select:none;
+  }
+  #stage{position:fixed;inset:0;display:block}
+
+  /* ---------- 顶部标题 ---------- */
+  .brand{
+    position:fixed;left:34px;top:30px;pointer-events:none;
+    color:rgba(120,72,46,.62);
+  }
+  .brand b{display:block;font-size:19px;letter-spacing:.42em;font-weight:500;color:rgba(110,62,38,.82)}
+  .brand span{display:block;margin-top:7px;font-size:9.5px;letter-spacing:.34em;text-transform:uppercase;color:rgba(120,80,56,.42)}
+
+  /* ---------- 底部提示 ---------- */
+  .tip{
+    position:fixed;left:50%;bottom:38px;transform:translateX(-50%);
+    display:flex;align-items:center;gap:10px;
+    padding:11px 22px;border-radius:999px;
+    background:rgba(255,250,244,.62);
+    border:1px solid rgba(178,132,100,.24);
+    box-shadow:0 10px 34px rgba(140,96,64,.13);
+    backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+    color:rgba(104,66,44,.86);font-size:13.5px;letter-spacing:.05em;
+    white-space:nowrap;transition:opacity .45s ease, transform .45s ease;
+  }
+  .tip.hide{opacity:0;transform:translate(-50%,12px);pointer-events:none}
+  .tip .pulse{
+    width:7px;height:7px;border-radius:50%;background:#e8845a;flex:none;
+    box-shadow:0 0 0 0 rgba(232,132,90,.55);animation:pp 2.2s infinite;
+  }
+  @keyframes pp{
+    0%{box-shadow:0 0 0 0 rgba(232,132,90,.5)}
+    70%{box-shadow:0 0 0 11px rgba(232,132,90,0)}
+    100%{box-shadow:0 0 0 0 rgba(232,132,90,0)}
+  }
+
+  /* ---------- 开摄像头按钮 ---------- */
+  .cta{
+    position:fixed;left:50%;bottom:96px;transform:translateX(-50%);
+    display:flex;align-items:center;gap:10px;
+    padding:14px 30px;border-radius:999px;border:none;cursor:pointer;
+    background:linear-gradient(140deg,#f0a276,#dd6f45);
+    color:#fff;font-size:14.5px;letter-spacing:.10em;font-family:inherit;
+    box-shadow:0 14px 34px rgba(200,104,62,.36), inset 0 1px 0 rgba(255,255,255,.4);
+    transition:transform .25s cubic-bezier(.2,.8,.3,1), box-shadow .25s, opacity .4s;
+    white-space:nowrap;
+  }
+  .cta:hover{transform:translate(-50%,-2px);box-shadow:0 18px 40px rgba(200,104,62,.44), inset 0 1px 0 rgba(255,255,255,.45)}
+  .cta:active{transform:translate(-50%,1px) scale(.985)}
+  .cta.gone{opacity:0;pointer-events:none;transform:translate(-50%,10px)}
+  .cta svg{width:17px;height:17px;flex:none}
+
+  /* ---------- 摄像头小窗 ---------- */
+  .cam{
+    position:fixed;right:26px;bottom:26px;width:186px;
+    border-radius:18px;overflow:hidden;
+    border:1px solid rgba(255,255,255,.55);
+    box-shadow:0 16px 40px rgba(120,80,54,.26);
+    opacity:0;transform:translateY(14px) scale(.94);
+    transition:opacity .5s ease, transform .5s cubic-bezier(.2,.8,.3,1);
+    background:#2a1d16;
+  }
+  .cam.on{opacity:1;transform:none}
+  .cam video{display:block;width:100%;height:132px;object-fit:cover;transform:scaleX(-1)}
+  .cam .bar{
+    position:absolute;left:0;right:0;top:0;height:3px;background:rgba(255,255,255,.18);
+  }
+  .cam .bar i{display:block;height:100%;width:0%;background:linear-gradient(90deg,#ffc59a,#e8703f);transition:width .12s linear}
+  .cam .msg{
+    position:absolute;left:10px;bottom:8px;right:10px;
+    font-size:11px;letter-spacing:.04em;color:rgba(255,255,255,.82);
+    text-shadow:0 1px 6px rgba(0,0,0,.5);display:flex;align-items:center;gap:6px;
+  }
+  .cam .msg i{
+    width:6px;height:6px;border-radius:50%;background:#7ee08c;flex:none;
+    box-shadow:0 0 8px rgba(126,224,140,.9);
+  }
+  .cam .msg i.off{background:#e8a05a;box-shadow:0 0 8px rgba(232,160,90,.9)}
+
+  @media (max-width:680px){
+    .brand{left:20px;top:20px}
+    .brand b{font-size:16px;letter-spacing:.3em}
+    .tip{font-size:12px;bottom:26px;padding:10px 17px}
+    .cta{bottom:78px;padding:12px 18px;font-size:12.5px;letter-spacing:.06em;gap:7px}
+    .cta svg{width:15px;height:15px}
+    .cam{right:14px;bottom:14px;width:124px;border-radius:14px}
+    .cam video{height:88px}
+  }
+</style>
+</head>
+<body>
+<canvas id="stage"></canvas>
+
+<div class="brand"><b>花开</b><span>bloom by hand</span></div>
+
+<button class="cta" id="cta">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M15 10.5V6.5a1.5 1.5 0 0 0-3 0v4"/>
+    <path d="M18 11V8a1.5 1.5 0 0 0-3 0v3"/>
+    <path d="M12 10V5.5a1.5 1.5 0 0 0-3 0V13"/>
+    <path d="M9 13v-1.5a1.5 1.5 0 0 0-3 0V15a6 6 0 0 0 6 6h1.5a5.5 5.5 0 0 0 5.5-5.5V11"/>
+  </svg>
+  开启摄像头 · 用手开花
+</button>
+
+<div class="tip" id="tip"><span class="pulse"></span><span id="tipText">张开手掌，让花慢慢绽放</span></div>
+
+<div class="cam" id="cam">
+  <video id="video" playsinline muted></video>
+  <div class="bar"><i id="camBar"></i></div>
+  <div class="msg"><i id="camDot" class="off"></i><span id="camMsg">正在寻找手…</span></div>
+</div>
+
+<script src="assets/hands/hands.js"></script>
+<script>
+(function(){
+"use strict";
+
+/* ============================================================
+   0. 基础工具
+   ============================================================ */
+const TAU = Math.PI * 2;
+const clamp = (v,a,b) => v<a?a:(v>b?b:v);
+const lerp  = (a,b,t) => a+(b-a)*t;
+const easeOutCubic = t => 1-Math.pow(1-t,3);
+const easeInOutSine = t => -(Math.cos(Math.PI*t)-1)/2;
+
+/* ============================================================
+   1. 画布
+   ============================================================ */
+const cvs = document.getElementById('stage');
+const ctx = cvs.getContext('2d');
+let W=0, H=0, DPR=1;
+
+// 背景离屏画布
+const bg = document.createElement('canvas');
+const bgx = bg.getContext('2d');
+
+// 花朵离屏画布（用于整体打光合成）
+const fc = document.createElement('canvas');
+const fx = fc.getContext('2d');
+let S = 200;          // 花朵基准半径（像素）
+let FS = 640;         // 花画布边长
+
+function resize(){
+  DPR = Math.min(window.devicePixelRatio||1, 2);
+  W = window.innerWidth; H = window.innerHeight;
+  cvs.width = Math.round(W*DPR); cvs.height = Math.round(H*DPR);
+  cvs.style.width = W+'px'; cvs.style.height = H+'px';
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+
+  S = clamp(Math.min(W,H) * 0.335, 120, 360);
+  FS = Math.ceil(S * 3.6);
+  fc.width = Math.ceil(FS*DPR); fc.height = Math.ceil(FS*DPR);
+  fx.setTransform(DPR,0,0,DPR,0,0);
+
+  buildBackground();
+  buildNoise();
+  buildVelvet();
+}
+
+/* ============================================================
+   2. 背景：米杏色柔焦 + 光斑 + 颗粒 + 暗角
+   ============================================================ */
+let noisePattern = null;
+function buildNoise(){
+  const n = document.createElement('canvas');
+  n.width = n.height = 160;
+  const nx = n.getContext('2d');
+  const img = nx.createImageData(160,160);
+  for (let i=0;i<img.data.length;i+=4){
+    const v = 128 + (Math.random()*2-1)*46;
+    img.data[i]=img.data[i+1]=img.data[i+2]=v;
+    img.data[i+3]=255;
+  }
+  nx.putImageData(img,0,0);
+  noisePattern = ctx.createPattern(n,'repeat');
+}
+
+let velvetPat = null;
+function buildVelvet(){
+  const c = document.createElement('canvas');
+  c.width = c.height = 256;
+  const g = c.getContext('2d');
+  const img = g.createImageData(256,256);
+  for (let y=0;y<256;y++){
+    for (let x=0;x<256;x++){
+      const i = (y*256+x)*4;
+      const fiber = Math.sin(y*1.9 + Math.sin(x*0.11)*2.6)*9;   // 横向丝绒纤维
+      const grain = (Math.random()-0.5)*36;
+      const v = clamp(128 + fiber + grain, 0, 255);
+      img.data[i]=img.data[i+1]=img.data[i+2]=v;
+      img.data[i+3]=255;
+    }
+  }
+  g.putImageData(img,0,0);
+  velvetPat = fx.createPattern(c,'repeat');
+}
+
+function buildBackground(){
+  bg.width = Math.round(W*DPR); bg.height = Math.round(H*DPR);
+  bgx.setTransform(DPR,0,0,DPR,0,0);
+
+  // 主渐变：暖米杏
+  const g = bgx.createRadialGradient(W*0.42, H*0.30, 0, W*0.5, H*0.55, Math.max(W,H)*0.92);
+  g.addColorStop(0,   '#fbf0e2');
+  g.addColorStop(0.34,'#f3e4d1');
+  g.addColorStop(0.68,'#e8d5be');
+  g.addColorStop(1,   '#d8bfa4');
+  bgx.fillStyle = g;
+  bgx.fillRect(0,0,W,H);
+
+  // 左上暖光斑
+  const s1 = bgx.createRadialGradient(W*0.22, H*0.16, 0, W*0.22, H*0.16, Math.max(W,H)*0.55);
+  s1.addColorStop(0,'rgba(255,246,228,.85)');
+  s1.addColorStop(0.5,'rgba(255,238,214,.28)');
+  s1.addColorStop(1,'rgba(255,235,210,0)');
+  bgx.fillStyle = s1; bgx.fillRect(0,0,W,H);
+
+  // 右下冷一点的回光，拉开层次
+  const s2 = bgx.createRadialGradient(W*0.92, H*0.95, 0, W*0.92, H*0.95, Math.max(W,H)*0.6);
+  s2.addColorStop(0,'rgba(176,150,138,.30)');
+  s2.addColorStop(1,'rgba(176,150,138,0)');
+  bgx.fillStyle = s2; bgx.fillRect(0,0,W,H);
+
+  // 背景里两团虚焦光斑，模拟浅景深外的反光
+  const bokeh = (x,y,r,a) => {
+    const bg2 = bgx.createRadialGradient(x,y,0,x,y,r);
+    bg2.addColorStop(0,`rgba(255,250,240,${a})`);
+    bg2.addColorStop(0.62,`rgba(255,246,232,${a*0.55})`);
+    bg2.addColorStop(1,'rgba(255,246,232,0)');
+    bgx.fillStyle=bg2; bgx.beginPath(); bgx.arc(x,y,r,0,TAU); bgx.fill();
+  };
+  bokeh(W*0.78, H*0.18, Math.min(W,H)*0.16, 0.34);
+  bokeh(W*0.14, H*0.72, Math.min(W,H)*0.20, 0.20);
+  bokeh(W*0.62, H*0.86, Math.min(W,H)*0.13, 0.16);
+
+  // 颗粒
+  if (noisePattern){
+    bgx.globalAlpha = 0.055;
+    bgx.globalCompositeOperation = 'overlay';
+    bgx.fillStyle = noisePattern;
+    bgx.fillRect(0,0,W,H);
+    bgx.globalCompositeOperation = 'source-over';
+    bgx.globalAlpha = 1;
+  }
+
+  // 暗角
+  const v = bgx.createRadialGradient(W*0.5,H*0.48, Math.min(W,H)*0.22, W*0.5,H*0.5, Math.max(W,H)*0.78);
+  v.addColorStop(0,'rgba(120,84,58,0)');
+  v.addColorStop(1,'rgba(96,62,40,.17)');
+  bgx.fillStyle = v; bgx.fillRect(0,0,W,H);
+}
+
+/* ============================================================
+   3. 玫瑰几何
+   ============================================================ */
+// 从内到外？ 数组顺序 = 绘制顺序：外层先画，内层覆盖其上
+const LAYERS = [
+  { n:6, R:1.00, w:0.62, r0:0.26, hue:23, sat:84, dark:54, light:72, sh:1, delay:0.00 },
+  { n:7, R:0.87, w:0.64, r0:0.21, hue:21, sat:84, dark:50, light:69, sh:1, delay:0.04 },
+  { n:7, R:0.74, w:0.66, r0:0.16, hue:19, sat:85, dark:47, light:65, sh:1, delay:0.09 },
+  { n:6, R:0.61, w:0.68, r0:0.11, hue:17, sat:84, dark:44, light:61, sh:0, delay:0.15 },
+  { n:6, R:0.49, w:0.70, r0:0.07, hue:16, sat:82, dark:41, light:57, sh:0, delay:0.21 },
+  { n:5, R:0.38, w:0.72, r0:0.035,hue:14, sat:80, dark:38, light:53, sh:0, delay:0.27 },
+  { n:4, R:0.28, w:0.76, r0:0.00, hue:13, sat:76, dark:35, light:49, sh:0, delay:0.33 },
+  { n:3, R:0.19, w:0.80, r0:0.00, hue:12, sat:72, dark:33, light:46, sh:0, delay:0.38 }
+];
+
+const P = (a,r) => ({ x: Math.cos(a)*r, y: Math.sin(a)*r });
+const hash = n => { const s = Math.sin(n*127.1)*43758.5453; return s - Math.floor(s); };
+
+// 每层花瓣角度：不均匀分布（彻底打破同心环均分感）
+const LAYER_ANGLES = LAYERS.map((L, li) => {
+  const arr = []; let acc = hash(li*7.71)*TAU;
+  for (let i=0;i<L.n;i++){
+    arr.push(acc);
+    acc += (TAU/L.n) * (0.70 + 0.60*hash(li*31.7 + i*3.37));
+  }
+  const k = TAU/acc;            // 归一化，保证首尾闭合
+  return arr.map(a => a*k);
+});
+
+/* 单片花瓣：返回 Path2D，局部坐标，根部 (0,-r0)，尖端 (0,-R)，左右不对称 + 顶部起伏 */
+function petalPath(r0, R, w, seed){
+  const g = new Path2D();
+  const len = Math.max(0.5, R - r0);
+  const W2 = w * len;
+  const s1 = Math.sin(seed*2.31), s2 = Math.cos(seed*1.73), s3 = Math.sin(seed*0.91);
+  const wl = W2 * (1 + s1*0.12);
+  const wr = W2 * (1 + s2*0.12);
+  const tipX = W2 * s3 * 0.18;
+  const topY = -R - len*0.04;
+
+  g.moveTo(0, -r0);
+  g.bezierCurveTo(-wl*0.50, -r0-len*0.13, -wl*0.98, -r0-len*0.55, -wl*0.56, -R+len*0.11);
+  g.quadraticCurveTo(-wl*0.30 + tipX*0.45, topY, -wl*0.13 + tipX*0.55, -R+len*0.045);
+  g.quadraticCurveTo(-wl*0.01 + tipX*0.85, topY+len*0.02, tipX, -R+len*0.015);
+  g.quadraticCurveTo(wr*0.10 + tipX*0.55, topY, wr*0.30, -R+len*0.06);
+  g.quadraticCurveTo(wr*0.46, topY+len*0.012, wr*0.56, -R+len*0.11);
+  g.bezierCurveTo(wr*0.98, -r0-len*0.55, wr*0.50, -r0-len*0.13, 0, -r0);
+  g.closePath();
+  return g;
+}
+
+/* ============================================================
+   4. 绘制花
+   ============================================================ */
+// 状态
+const state = {
+  open: 0.06,        // 当前开合 0..1
+  target: 0.12,      // 目标开合
+  hand: { x:0.5, y:0.5 },  // 掌心（0..1）
+  tilt: { x:0, y:0 },
+  start: performance.now(),
+  paused: false
+};
+
+function drawFlower(t){
+  const o = state.open;
+
+  fx.setTransform(DPR,0,0,DPR,0,0);
+  fx.clearRect(0,0,FS,FS);
+
+  const cx = FS*0.5, cy = FS*0.32;
+
+  fx.save();
+  fx.translate(cx, cy);
+
+  // 整体呼吸与倾斜
+  const breathe = Math.sin(t*0.9)*0.005;
+  fx.rotate(breathe + state.tilt.x*0.055);
+  fx.scale(1, 0.955);
+  fx.translate(state.tilt.y*3, 0);
+
+  /* ---------- 花茎（渐细、带弧度、上端入花托） ---------- */
+  const stemTop = S*0.26;
+  const stemBot = S*2.42;
+  const bend = S*0.035;
+  const sGrad = fx.createLinearGradient(-S*0.05, 0, S*0.05, 0);
+  sGrad.addColorStop(0,   'rgba(96,116,74,.98)');
+  sGrad.addColorStop(0.30,'rgba(146,166,106,.98)');
+  sGrad.addColorStop(0.58,'rgba(112,132,82,.98)');
+  sGrad.addColorStop(1,   'rgba(62,80,48,.98)');
+  fx.beginPath();
+  fx.moveTo(-S*0.036, stemTop);
+  fx.bezierCurveTo(-S*0.05, stemTop+S*0.55, -S*0.06-bend, stemBot-S*0.45, -S*0.045-bend*1.6, stemBot);
+  fx.lineTo(S*0.05-bend*1.6, stemBot);
+  fx.bezierCurveTo(S*0.05-bend, stemBot-S*0.45, S*0.058, stemTop+S*0.55, S*0.042, stemTop);
+  fx.closePath();
+  fx.fillStyle = sGrad;
+  fx.fill();
+
+  // 茎底轻微渐隐（末端已在画面之外）
+  const fade = fx.createLinearGradient(0, S*2.10, 0, S*2.44);
+  fade.addColorStop(0, 'rgba(0,0,0,0)');
+  fade.addColorStop(1, 'rgba(0,0,0,.85)');
+  fx.save();
+  fx.globalCompositeOperation = 'destination-out';
+  fx.fillStyle = fade;
+  fx.fillRect(-S*0.3, S*2.10, S*0.6, S*0.36);
+  fx.restore();
+
+  /* ---------- 萼片（自然错落，向下外翻） ---------- */
+  const sepal = (ang, len, wide, ph) => {
+    const a = P(Math.PI*0.5 + ang, S*0.16);
+    fx.save();
+    fx.translate(a.x, a.y);
+    fx.rotate(Math.PI*0.5 + ang + Math.sin(t*0.6+ph)*0.012);
+    const g = fx.createLinearGradient(0,0,len,0);
+    g.addColorStop(0,'rgba(72,92,58,.98)');
+    g.addColorStop(0.5,'rgba(112,136,86,.95)');
+    g.addColorStop(1,'rgba(168,152,108,.92)');
+    fx.beginPath();
+    fx.moveTo(0,0);
+    fx.bezierCurveTo(len*0.28, -wide*0.85, len*0.82, -wide*0.42, len, 0);
+    fx.bezierCurveTo(len*0.82, wide*0.42, len*0.28, wide*0.85, 0,0);
+    fx.fillStyle = g;
+    fx.fill();
+    fx.restore();
+  };
+  const sepalK = 0.60 + 0.40*easeInOutSine(clamp(o*1.4,0,1));
+  sepal(-0.62, S*0.42*sepalK, S*0.085, 0.3);
+  sepal( 0.58, S*0.46*sepalK, S*0.090, 1.1);
+  sepal(-0.24, S*0.34*sepalK, S*0.070, 2.0);
+  sepal( 0.22, S*0.32*sepalK, S*0.068, 2.7);
+  sepal( 0.96, S*0.30*sepalK, S*0.062, 3.4);
+
+  /* ---------- 叶片（复叶，错落生长） ---------- */
+  const leaf = (bx, by, ang, len, wid, seed) => {
+    fx.save();
+    fx.translate(bx, by);
+    fx.rotate(ang + Math.sin(t*0.5 + seed)*0.015);
+    const g = fx.createLinearGradient(0, -wid, 0, wid);
+    g.addColorStop(0,   'rgba(150,172,112,.98)');
+    g.addColorStop(0.45,'rgba(112,140,86,.98)');
+    g.addColorStop(1,   'rgba(66,86,54,.98)');
+    fx.beginPath();
+    fx.moveTo(0,0);
+    fx.bezierCurveTo(len*0.22, -wid*0.92, len*0.70, -wid*0.80, len, -wid*0.05);
+    fx.bezierCurveTo(len*0.70,  wid*0.80, len*0.22,  wid*0.92, 0, 0);
+    fx.fillStyle = g;
+    fx.fill();
+    // 中脉
+    fx.beginPath();
+    fx.moveTo(len*0.03, 0);
+    fx.quadraticCurveTo(len*0.5, -wid*0.06, len*0.97, -wid*0.05);
+    fx.strokeStyle = 'rgba(214,232,182,.42)';
+    fx.lineWidth = Math.max(0.6, S*0.0035);
+    fx.stroke();
+    // 侧脉
+    fx.lineWidth = Math.max(0.4, S*0.0022);
+    for (let k=1;k<=4;k++){
+      const u = k/5;
+      fx.beginPath();
+      fx.moveTo(len*u, -wid*0.04);
+      fx.quadraticCurveTo(len*(u+0.10), -wid*0.28, len*(u+0.18), -wid*0.52*(1-u*0.5));
+      fx.stroke();
+      fx.beginPath();
+      fx.moveTo(len*u, -wid*0.04);
+      fx.quadraticCurveTo(len*(u+0.10),  wid*0.28, len*(u+0.18),  wid*0.52*(1-u*0.5));
+      fx.stroke();
+    }
+    fx.restore();
+  };
+  leaf(-S*0.012, S*0.86, -2.62, S*0.52, S*0.105, 0.7);
+  leaf( S*0.014, S*1.16, -0.52, S*0.56, S*0.112, 1.9);
+  leaf(-S*0.020, S*1.42, -2.86, S*0.42, S*0.090, 3.1);
+
+  /* ---------- 花心基座（防空洞、压住内层根部） ---------- */
+  const baseR = S*(0.085 + 0.075*easeInOutSine(o));
+  const baseG = fx.createRadialGradient(-S*0.02,-S*0.03, 0, 0,0, baseR);
+  baseG.addColorStop(0,   'hsl(16 84% 44%)');
+  baseG.addColorStop(0.45,'hsl(14 82% 36%)');
+  baseG.addColorStop(0.78,'hsla(12 78% 28% / .55)');
+  baseG.addColorStop(1,   'hsla(12 78% 26% / 0)');
+  fx.beginPath(); fx.arc(0,0,baseR,0,TAU);
+  fx.fillStyle = baseG; fx.fill();
+
+  /* ---------- 花瓣：外层 → 内层 ---------- */
+  const light = { x: -0.62, y: -0.78 };   // 光源方向（左上）
+
+  for (let li=0; li<LAYERS.length; li++){
+    const L = LAYERS[li];
+    const ol = clamp((o - L.delay) / (1 - L.delay), 0, 1);
+    const eol = easeInOutSine(ol);
+
+    const R  = S * L.R * (0.17 + 0.83*eol);
+    const r0 = S * L.r0 * (0.18 + 0.82*eol);
+
+    // 该层沿花瓣方向的渐变基准色（保留用于层次参考）
+    const gBase = null;
+
+    const phase = li*2.39996 + 0.3;    // 黄金角：层与层螺旋错开
+
+    for (let i=0;i<L.n;i++){
+      const seed = i*3.7 + li*11.3;
+      // 角度、大小、宽度大幅错落
+      const ang = LAYER_ANGLES[li][i]
+                + Math.sin(seed*1.3)*0.10 + Math.cos(seed*0.7)*0.06
+                + Math.sin(t*0.5 + seed)*0.012*eol;
+
+      const Rj = R * (1 + Math.sin(seed*2.9)*0.115 + Math.cos(seed*1.1)*0.055);
+      const Wj = L.w * (1.34 - 0.34*eol) * (1 + Math.sin(seed*4.1)*0.13);
+
+      // 每片独立色差，避免整层一个颜色
+      const hh = L.hue + Math.sin(seed*1.9)*2.6;
+      const ll = L.light + Math.cos(seed*2.4)*2.4;
+      const g = fx.createLinearGradient(0, -r0, 0, -Rj*1.04);
+      g.addColorStop(0.00, `hsl(${hh-8} ${L.sat}% ${L.dark-10}%)`);
+      g.addColorStop(0.22, `hsl(${hh-3} ${L.sat}% ${L.dark}%)`);
+      g.addColorStop(0.58, `hsl(${hh}   ${L.sat-2}% ${ll-6}%)`);
+      g.addColorStop(0.86, `hsl(${hh+3} ${L.sat-8}% ${ll+2}%)`);
+      g.addColorStop(1.00, `hsl(${hh+7} ${L.sat-16}% ${ll+10}%)`);
+
+      fx.save();
+      fx.rotate(ang + Math.sin(seed*5.3)*0.035);
+      // 根部前后错位，制造遮挡层次
+      fx.translate(0, -r0*0.12*Math.sin(seed*3.1));
+      // 花瓣向外倾倒（俯视：外层平躺、内层立起）
+      const lean = 0.04 + 0.30*eol*L.R;
+      fx.scale(1 + lean*0.62, 1 - lean*0.55);
+
+      const path = petalPath(r0, Rj, Wj, seed);
+
+      // 1) 底层：投影 + 底色
+      if (L.sh){
+        fx.save();
+        fx.shadowColor = 'rgba(96,30,10,.40)';
+        fx.shadowBlur  = S*0.05;
+        fx.shadowOffsetX = Math.cos(ang)*S*0.008;
+        fx.shadowOffsetY = S*0.016;
+        fx.fillStyle = g; fx.fill(path);
+        fx.restore();
+      } else {
+        fx.fillStyle = g; fx.fill(path);
+      }
+
+      // 2.2) 丝绒纹理叠加（仅外层，直接填充路径，不 clip）
+      if (li < 3 && velvetPat){
+        fx.save();
+        fx.globalCompositeOperation = 'soft-light';
+        fx.globalAlpha = 0.45;
+        fx.fillStyle = velvetPat;
+        fx.fill(path);
+        fx.restore();
+      }
+
+      // 3) 单瓣曲面明暗 + 高光斑
+      const sg = fx.createLinearGradient(-Wj*R*0.95, -R*0.85, Wj*R*0.8, -r0*0.6);
+      sg.addColorStop(0,   'rgba(255,246,230,.26)');
+      sg.addColorStop(0.42,'rgba(255,238,214,.04)');
+      sg.addColorStop(1,   'rgba(92,26,8,.30)');
+      fx.fillStyle = sg;
+      fx.fill(path);
+
+      // 不均匀反光斑（让每片花瓣不一个死颜色）
+      const hx = (-0.35 + 0.7*hash(seed*1.7)) * Wj*Rj;
+      const hy = -r0 - (Rj-r0)*(0.30 + 0.44*hash(seed*2.9));
+      const hr = Wj*Rj*0.95;
+      const hgl = fx.createRadialGradient(hx, hy, 0, hx, hy, hr);
+      hgl.addColorStop(0, 'rgba(255,238,212,.20)');
+      hgl.addColorStop(0.6,'rgba(255,220,180,.06)');
+      hgl.addColorStop(1, 'rgba(255,200,160,0)');
+      fx.globalCompositeOperation = 'lighter';
+      fx.fillStyle = hgl;
+      fx.fill(path);
+      fx.globalCompositeOperation = 'source-over';
+      // 4) 卷边亮线
+      fx.strokeStyle = `hsla(${L.hue+12}, 96%, ${L.light+18}%, .30)`;
+      fx.lineWidth = Math.max(.5, S*0.0042);
+      fx.stroke(path);
+
+      // 4) 水珠（放在花瓣中上部）
+        if (li < 3 && (i + li) % 3 === 0){
+          const dr = S*(0.022 + 0.010*((i+li)%3));
+          waterDrop(-Rj*Wj*0.16, -r0-(Rj-r0)*0.52, dr);
+        }
+
+      fx.restore();
+    }
+  }
+
+  /* ---------- 花心高光（收得很淡，避免圆形亮块） ---------- */
+  if (o > 0.34){
+    const k = clamp((o-0.34)/0.45,0,1);
+    const rr = S*0.055*k;
+    const cg = fx.createRadialGradient(-S*0.015,-S*0.02,0, 0,0, rr*2.4);
+    cg.addColorStop(0,'rgba(255,196,148,.55)');
+    cg.addColorStop(0.35,'rgba(214,96,58,.28)');
+    cg.addColorStop(1,'rgba(150,44,22,0)');
+    fx.fillStyle = cg;
+    fx.beginPath(); fx.arc(0,0,rr*2.4,0,TAU); fx.fill();
+  }
+
+  fx.restore();
+
+  /* ---------- 整朵花统一打光 ---------- */
+  fx.save();
+  fx.globalCompositeOperation = 'source-atop';
+
+  // 主光：左上暖白 → 右下深棕
+  const lg = fx.createLinearGradient(cx - S*1.1, cy - S*1.2, cx + S*1.0, cy + S*1.15);
+  lg.addColorStop(0,   'rgba(255,246,226,.62)');
+  lg.addColorStop(0.30,'rgba(255,236,206,.18)');
+  lg.addColorStop(0.62,'rgba(140,62,30,.14)');
+  lg.addColorStop(1,   'rgba(74,20,6,.52)');
+  fx.fillStyle = lg;
+  fx.fillRect(0,0,FS,FS);
+
+  // 花心暖光聚集
+  fx.globalCompositeOperation = 'lighter';
+  const hg = fx.createRadialGradient(cx - S*0.10, cy - S*0.20, 0, cx, cy, S*0.95);
+  hg.addColorStop(0,'rgba(255,214,168,.13)');
+  hg.addColorStop(0.5,'rgba(255,190,140,.05)');
+  hg.addColorStop(1,'rgba(255,180,130,0)');
+  fx.fillStyle = hg;
+  fx.fillRect(0,0,FS,FS);
+
+  // 丝绒肌理（只作用于花体）
+  if (false && velvetPat){
+    fx.globalCompositeOperation = 'soft-light';
+    fx.globalAlpha = 0.30;
+    fx.fillStyle = velvetPat;
+    fx.fillRect(0,0,FS,FS);
+    fx.globalAlpha = 1;
+  }
+
+  fx.restore();
+  fx.globalCompositeOperation = 'source-over';
+
+  /* ---------- 合成到主画布 ---------- */
+  ctx.drawImage(fc, W*0.5 - cx, H*0.41 - cy, FS, FS);
+}
+
+// 水珠
+function waterDrop(x,y,r){
+  fx.save();
+  fx.shadowColor = 'rgba(120,44,18,.30)';
+  fx.shadowBlur = r*1.6;
+  fx.shadowOffsetY = r*0.4;
+  fx.beginPath(); fx.arc(x,y,r,0,TAU);
+  fx.fillStyle = 'rgba(255,200,160,.55)'; fx.fill();
+  fx.restore();
+
+  const g = fx.createRadialGradient(x-r*0.35,y-r*0.38, r*0.05, x, y, r);
+  g.addColorStop(0,   'rgba(255,255,255,.92)');
+  g.addColorStop(0.28,'rgba(255,242,226,.55)');
+  g.addColorStop(0.72,'rgba(255,196,150,.30)');
+  g.addColorStop(1,   'rgba(150,66,36,.34)');
+  fx.beginPath(); fx.arc(x,y,r,0,TAU);
+  fx.fillStyle = g; fx.fill();
+
+  fx.beginPath(); fx.arc(x-r*0.32, y-r*0.36, r*0.24, 0, TAU);
+  fx.fillStyle = 'rgba(255,255,255,.95)'; fx.fill();
+
+  fx.beginPath(); fx.arc(x+r*0.30, y+r*0.34, r*0.14, 0, TAU);
+  fx.fillStyle = 'rgba(255,236,214,.5)'; fx.fill();
+}
+
+/* ============================================================
+   5. 前景浮尘（微距里的空气感）
+   ============================================================ */
+const motes = [];
+function initMotes(){
+  motes.length = 0;
+  const n = Math.round(clamp(W*H/34000, 14, 42));
+  for (let i=0;i<n;i++){
+    motes.push({
+      x: Math.random()*W, y: Math.random()*H,
+      r: 0.5 + Math.random()*1.6,
+      a: 0.05 + Math.random()*0.13,
+      vy: -(0.04 + Math.random()*0.14),
+      vx: (Math.random()-0.5)*0.08,
+      ph: Math.random()*TAU
+    });
+  }
+}
+function drawMotes(t, dt){
+  ctx.save();
+  for (const m of motes){
+    m.x += m.vx*dt*0.06; m.y += m.vy*dt*0.06;
+    if (m.y < -12){ m.y = H+12; m.x = Math.random()*W; }
+    if (m.x < -12) m.x = W+12;
+    if (m.x > W+12) m.x = -12;
+    const tw = 0.5 + 0.5*Math.sin(t*0.9 + m.ph);
+    ctx.globalAlpha = m.a*tw;
+    ctx.fillStyle = '#fffaf2';
+    ctx.beginPath(); ctx.arc(m.x,m.y,m.r,0,TAU); ctx.fill();
+  }
+  ctx.restore();
+}
+
+/* ============================================================
+   6. 主循环
+   ============================================================ */
+let last = performance.now();
+function frame(now){
+  const dt = Math.min(64, now-last); last = now;
+  const t = (now - state.start)/1000;
+
+  // 开合平滑：限速（缓慢绽放的手感）
+  const diff = state.target - state.open;
+  const maxStep = 0.42 * dt/1000;          // 每秒最多变 0.42
+  state.open += clamp(diff, -maxStep, maxStep);
+
+  // 倾斜平滑
+  state.tilt.x += ((state.hand.x-0.5)*2 - state.tilt.x)*0.05;
+  state.tilt.y += ((state.hand.y-0.5)*2 - state.tilt.y)*0.05;
+
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  ctx.drawImage(bg, 0, 0, W, H);
+
+  // 花朵在背景上的柔和投影（增加空间感）
+  const shg = ctx.createRadialGradient(W*0.5, H*0.41 + S*0.52, 0, W*0.5, H*0.41 + S*0.52, S*1.15);
+  shg.addColorStop(0,'rgba(122,84,54,.13)');
+  shg.addColorStop(0.5,'rgba(122,84,54,.05)');
+  shg.addColorStop(1,'rgba(122,84,54,0)');
+  ctx.fillStyle = shg;
+  ctx.save();
+  ctx.translate(W*0.5, H*0.41 + S*0.52);
+  ctx.scale(1, 0.52);
+  ctx.translate(-W*0.5, -(H*0.41 + S*0.52));
+  ctx.beginPath();
+  ctx.arc(W*0.5, H*0.41 + S*0.52, S*1.15, 0, TAU);
+  ctx.fill();
+  ctx.restore();
+
+  drawFlower(t);
+  drawMotes(t, dt);
+
+  requestAnimationFrame(frame);
+}
+
+/* ============================================================
+   7. 手势识别
+   ============================================================ */
+const video = document.getElementById('video');
+const camBox = document.getElementById('cam');
+const camMsg = document.getElementById('camMsg');
+const camDot = document.getElementById('camDot');
+const camBar = document.getElementById('camBar');
+const cta = document.getElementById('cta');
+const tip = document.getElementById('tip');
+const tipText = document.getElementById('tipText');
+
+let hands = null, camOn = false, running = false;
+let lastHandSeen = 0;
+let smoothOpen = 0.15;   // 原始张开度平滑值
+
+const TIPS = { idx:[5,6,7,8], mid:[9,10,11,12], rng:[13,14,15,16], pk:[17,18,19,20] };
+
+function handOpenness(lm){
+  const d = (a,b) => Math.hypot(lm[a].x-lm[b].x, lm[a].y-lm[b].y, (lm[a].z||0)-(lm[b].z||0));
+  const wrist = 0, midMcp = 9;
+  const palm = Math.max(d(wrist, midMcp), 1e-4);
+
+  let sum = 0, cnt = 0;
+  for (const k in TIPS){
+    const f = TIPS[k];
+    const mcp = f[0], tip = f[3];
+    const v = d(tip, mcp) / palm;
+    // 伸直 ≈ 0.85~1.05，弯曲 ≈ 0.25~0.42
+    sum += clamp((v - 0.34) / 0.56, 0, 1);
+    cnt++;
+  }
+  // 拇指：指尖到食指根
+  const th = clamp((d(4, 2)/palm - 0.30) / 0.55, 0, 1);
+  return clamp((sum/cnt)*0.82 + th*0.18, 0, 1);
+}
+
+function onResults(res){
+  const lms = res.multiHandLandmarks;
+  if (lms && lms.length){
+    lastHandSeen = performance.now();
+    const lm = lms[0];
+    const raw = handOpenness(lm);
+    smoothOpen = lerp(smoothOpen, raw, 0.16);
+    state.target = smoothOpen;
+
+    // 掌心位置（0..1）驱动轻微倾斜
+    let sx=0, sy=0;
+    for (const p of lm){ sx += p.x; sy += p.y; }
+    const hx = 1 - sx/lm.length;  // 镜像
+    const hy = sy/lm.length;
+    state.hand.x = lerp(state.hand.x, clamp(hx,0,1), 0.10);
+    state.hand.y = lerp(state.hand.y, clamp(hy,0,1), 0.10);
+
+    camDot.className = '';
+    camMsg.textContent = '已识别到手掌';
+    camBar.style.width = Math.round(smoothOpen*100)+'%';
+    tipText.textContent = raw > 0.72 ? '手掌张开 — 花正在绽放'
+                        : raw < 0.34 ? '手掌收拢 — 花正在合拢'
+                        : '保持住，花会慢慢跟随你';
+  } else {
+    if (performance.now() - lastHandSeen > 900){
+      camDot.className = 'off';
+      camMsg.textContent = '把手放进画面里';
+      camBar.style.width = '0%';
+      tipText.textContent = '把手掌对准摄像头，张开或握拳';
+      // 手消失：缓缓收回到半合
+      state.target = lerp(state.target, 0.28, 0.02);
+    }
+  }
+}
+
+async function startCamera(){
+  try{
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video:{ width:{ideal:640}, height:{ideal:480}, facingMode:'user' },
+      audio:false
+    });
+    video.srcObject = stream;
+    await video.play();
+
+    if (!hands){
+      hands = new Hands({ locateFile: f => 'assets/hands/' + f });
+      hands.setOptions({
+        maxNumHands: 1,
+        modelComplexity: 1,
+        minDetectionConfidence: 0.6,
+        minTrackingConfidence: 0.6,
+        selfieMode: true
+      });
+      hands.onResults(onResults);
+    }
+
+    camOn = true;
+    camBox.classList.add('on');
+    cta.classList.add('gone');
+    tip.classList.remove('hide');
+    tipText.textContent = '把手掌伸向镜头，张开或握拳';
+
+    if (!running){
+      running = true;
+      (async function pump(){
+        while (running){
+          if (!camOn){ running = false; break; }
+          if (video.readyState >= 2){
+            try { await hands.send({ image: video }); } catch(e){}
+          }
+          await new Promise(r => setTimeout(r, 28));
+        }
+      })();
+    }
+  } catch(err){
+    camBox.classList.remove('on');
+    cta.classList.remove('gone');
+    cta.innerHTML = '重试开启摄像头';
+    tip.classList.remove('hide');
+    tipText.textContent = '没拿到摄像头权限 · 现在可用鼠标上下移动控制开花';
+  }
+}
+
+cta.addEventListener('click', startCamera);
+
+/* ============================================================
+   8. 鼠标 / 触摸模式（无摄像头兜底）
+   ============================================================ */
+function pointerHandler(e){
+  const y = e.clientY / H;          // 上=开，下=合
+  state.target = clamp(1 - y*1.0, 0.05, 1);
+  state.hand.x = e.clientX / W;
+  state.hand.y = y;
+}
+window.addEventListener('pointermove', e => {
+  if (camOn) return;
+  if (e.pointerType === 'mouse' || e.buttons) pointerHandler(e);
+});
+window.addEventListener('pointerdown', e => {
+  if (camOn) return;
+  pointerHandler(e);
+});
+// 触屏拖动
+window.addEventListener('touchmove', e => {
+  if (camOn || !e.touches[0]) return;
+  pointerHandler(e.touches[0]);
+}, {passive:true});
+
+/* ============================================================
+   9. 启动
+   ============================================================ */
+window.addEventListener('resize', () => { resize(); initMotes(); });
+resize();
+initMotes();
+requestAnimationFrame(frame);
+
+// 首次进入的自动开花演示：花苞 → 微开 → 回到半合
+setTimeout(()=>{
+  if (camOn) return;
+  state.target = 0.62;
+  setTimeout(()=>{ if (!camOn) state.target = 0.18; }, 2600);
+}, 900);
+
+})();
+</script>
+</body>
+</html>
